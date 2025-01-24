@@ -2,40 +2,42 @@
 import subprocess
 import json
 import os
+import sys
 import httpx
 import functools
 import datetime
 import base58
-import bech32
 import ecdsa
 from mbedtls import hashlib
 from ecdsa import SECP256k1
 
 def compress_pubkey(pubkey_hex):
     """If the hex pubkey is uncompressed, compress it"""
-    if pubkey_hex.startswith('04'):
-        # chop off prefix indicating uncompressed if it is there
-        pubkey_hex = pubkey_hex[2:]
-    else:
+    if not pubkey_hex.startswith('04'):
+        if len(pubkey_hex) != 66:
+            raise RuntimeError("Compressed pubkey should be 33 bytes long")
         # return already compressed hex string
         return pubkey_hex
-    # hex to binary
-    pubkey_bytes = bytes.fromhex(pubkey_hex)
-    # chop up in its two parts x and y
-    x = int.from_bytes(pubkey_bytes[:32], byteorder='big')
-    y = int.from_bytes(pubkey_bytes[32:], byteorder='big')
-    # do the compression as by spec
-    prefix = b'\x02' if y % 2 == 0 else b'\x03' 
-    compressed = prefix + x.to_bytes(32, byteorder='big')
-    # return as hex again
-    return compressed.hex()
+    if len(pubkey_hex) != 130:
+        raise RuntimeError("Unompressed pubkey should be 65 bytes long")
+    x = pubkey_hex[2:66]  # x-coordinate in hex
+    y = int(pubkey_hex[66:], 16)  # Convert y-coordinate to integer
+    if y % 2 == 0:
+        pubkey_compressed = '02' + x
+    else:
+        pubkey_compressed = '03' + x
+    return pubkey_compressed
 
-def key_to_addr(hexkey):
+def key_to_addr(hexkey, ignore_size=False):
     """Convert hex key to a "1" type legacy bitcoin address"""
     # compress if needed
-    chexkey = compress_pubkey(hexkey)
+    if len(hexkey) != 66:
+        if len(hexkey) != 130:
+            raise RuntimeError("Pubkey should be 33 or 65 bytes long")
+        if not ignore_size:
+            raise RuntimeError("ignore_size should be set for 65 byte long pubkeys")
     # hex to binary
-    key = bytes.fromhex(chexkey)
+    key = bytes.fromhex(hexkey)
     # sha256 + ripemd160 hashing as by spec
     hash1 = hashlib.sha256()
     hash2 = hashlib.new('ripemd160')
@@ -79,6 +81,11 @@ class JsonRpc:
         """Accept any possible method and assume it is a valid JSON-RPC method"""
         return functools.partial(self._method, method) 
 
+
+startblock = 0
+if len(sys.argv) > 1:
+    startblock = int(sys.argv[1])
+
 # Call the cli tool once to find out where it is installed so we can get our .cookie file
 res = subprocess.run(["bitcoin-core.cli", "getrpcinfo"], stdout=subprocess.PIPE)
 # Get username and password from the bitcoin core .cookie file
@@ -88,9 +95,9 @@ with open(os.path.join(os.path.dirname(json.loads(res.stdout)["logpath"]),".cook
 # Create the JSON-RPC client
 rpc = JsonRpc(username, password)
 # Get the hash for the genesis block
-bhash = rpc.getblockhash(0)
+bhash = rpc.getblockhash(startblock)
 # initialize block counter
-count = 0
+count = startblock
 # Keep running untill we reach the last block
 while bhash:
     # Get the block as JSON at maximum verbosity
@@ -115,34 +122,52 @@ while bhash:
                 # Really old transactions use the uncompressed pubkey
                 if pvout["type"] == "pubkey":
                     # Normalize from pubkey to "1" address
-                    addr = key_to_addr(pvout["asm"].split(" ")[0])
+                    addr = key_to_addr(pvout["asm"].split(" ")[0], ignore_size=True)
+                    normalized = key_to_addr(compress_pubkey(pvout["asm"].split(" ")[0]))
+                    if addr != normalized:
+                        print("ALIAS", addr, normalized, compress_pubkey(pvout["asm"].split(" ")[0]), count, txno, "pubkey")
+                    else:
+                        print("PUBKEY", addr, compress_pubkey(pvout["asm"].split(" ")[0]), count, txno, "pubkey")
                     # Base output
-                    print("SPEND", addr, tim, count, txno, val, "pubkey")
+                    print("SPEND", addr, tim, val, count, txno, "pubkey")
                 # Normal legacy adresses and modern bech32 keyhash adresses
                 elif pvout["type"] in ("pubkeyhash", "witness_v0_keyhash"):
-                    addr = pvout["address"]
-                    # If it's a new 'bc' type bech32 address, convert to find the '1' adress with the same pubkey.
-                    if addr.startswith("bc"):
-                        addr = base58.b58encode(bytes(bech32.bech32_decode(addr)[1])).decode()
                     # Extract the signature depending on adress type
+
                     if pvout["type"] == "witness_v0_keyhash":
-                        pkey = vin["prevout"]["txinwitness"][1]
+                        pkey = compress_pubkey(vin["prevout"]["txinwitness"][1])
                     else:
-                        pkey = vin["scriptSig"]["asm"].split(" ")[-1]
-                    # Record the signature and '1' type address alias for the adress for if we need it. 
-                    print("ALIAS", pvout["address"], addr, pkey)
+                        pkey = compress_pubkey(vin["scriptSig"]["asm"].split(" ")[-1])
+                    # Normalize from pubkey to "1" address
+                    addr = key_to_addr(pkey)
+                    if addr != pvout["address"]:
+                        # Record the signature and '1' type address alias for the adress for if we need it. 
+                        print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"])
+                    else:
+                        print("PUBKEY", pvout["address"], pkey, count, txno, pvout["type"])
                     # Base output
-                    print("SPEND", pvout["address"], tim, count, txno, val, "keyhash")
+                    print("SPEND", pvout["address"], tim, val, count, txno, pvout["type"])
                 # Scripthash adresses of different types
                 elif pvout["type"] in ("scripthash", "witness_v0_scripthash", "witness_v1_taproot"):
                     # Get the public key used to sign with
-                    pkey = vin["prevout"]["txinwitness"][1]
-                    # Derive the "1" type adress that this pubkey would have
-                    addr = key_to_addr(pkey)
-                    # Record the signature and '1' type address alias for the adress for if we need it.
-                    print("ALIAS", pvout["address"], addr, pkey)
+                    if "txinwitness" in vin["prevout"] and len(vin["prevout"]["txinwitness"]) > 1:
+                        pkey = compress_pubkey(vin["prevout"]["txinwitness"][1])
+                        # Derive the "1" type adress that this pubkey would have
+                        addr = key_to_addr(pkey)
+                        # Record the signature and '1' type address alias for the adress for if we need it.
+                        print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"])
+                    # Special case, not sure why.
+                    elif "scriptSig" in vin and vin["scriptSig"]["asm"].startswith("5121"):
+                        pkey = vin["scriptSig"]["asm"][4:70]
+                        addr = key_to_addr(pkey)
+                        print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], "special-01")
+                    elif "scriptSig" in vin and len(vin["scriptSig"]["asm"]) < 10:
+                        pass
+                    else:
+                        print("MISSING", count, txno, pvout["type"], vin)
+                        raise RuntimeError("Missing pubkey")
                     # Base output
-                    print("SPEND", pvout["address"], tim, count, txno, val, "scripthash")
+                    print("SPEND", pvout["address"], tim, val, count, txno, pvout["type"])
         # Itterate all outputs for this transaction
         for vout in tx["vout"]:
             # Get the new output script and value
@@ -155,12 +180,12 @@ while bhash:
                 # Determine the '1' type address for this pubkey
                 addr = key_to_addr(pkey)
                 # Log that this pubkey belongs to this adress
-                print("PUBKEY", addr, pkey)
+                print("PUBKEY", addr, pkey, count, txno, "pubkey")
                 # Basic output
-                print("RECV", addr, tim, count, txno, val, "pubkey")
+                print("RECV", addr, tim, val, count, txno, "pubkey")
             elif pvin["type"] in ("pubkeyhash", "witness_v0_keyhash"):
-                print("RECV", pvin["address"], tim, count, txno, val, "keyhash")
+                print("RECV", pvin["address"], tim, val, count, txno, pvin["type"])
             elif pvin["type"] in ("scripthash", "witness_v0_scripthash", "witness_v1_taproot"):
-                print("RECV", pvin["address"], tim, count, txno, val, "scripthash")
+                print("9 RECV", pvin["address"], tim, val, count, txno, pvin["type"])
         txno += 1
     count += 1
