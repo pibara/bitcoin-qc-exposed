@@ -13,11 +13,14 @@ from ecdsa import SECP256k1
 
 def compress_pubkey(pubkey_hex):
     """If the hex pubkey is uncompressed, compress it"""
-    if not pubkey_hex.startswith('04'):
+    if pubkey_hex[:2] in ('02', '03'):
         if len(pubkey_hex) != 66:
             raise RuntimeError("Compressed pubkey should be 33 bytes long")
         # return already compressed hex string
         return pubkey_hex
+    if not pubkey_hex.startswith('04'):
+        print(len(pubkey), pubkey)
+        raise RuntimeError("Pubkey should start with 02/03/04")
     if len(pubkey_hex) != 130:
         raise RuntimeError("Unompressed pubkey should be 65 bytes long")
     x = pubkey_hex[2:66]  # x-coordinate in hex
@@ -162,9 +165,43 @@ while bhash:
                         addr = key_to_addr(pkey)
                         print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], "special-01")
                     elif "scriptSig" in vin and len(vin["scriptSig"]["asm"]) < 10:
+                        print("SKIP-PUBKEY", pvout["address"], None, None, count, txno, pvout["type"], "special-02")
                         pass
+                    elif "scriptSig" in vin and vin["scriptSig"]["asm"].split(" ")[-1][:2] in ("51", "52","53","54","58", "41", "21"):
+                        keys_string = vin["scriptSig"]["asm"].split(" ")[-1]
+                        if vin["scriptSig"]["asm"].split(" ")[-1][:2] not in ("41", "21"):
+                            keys_string = keys_string[2:]
+                        keys = []
+                        while keys_string[:2] in ("21", "41"):
+                            if keys_string[:2] == "21":
+                                keys.append(keys_string[2:68])
+                                keys_string = keys_string[68:]
+                            else:
+                                keys.append(keys_string[2:132])
+                                keys_string = keys_string[132:]
+                        if len(keys_string) > 2:
+                            print("MISSING3", pvout["address"], None, None, count, txno, pvout["type"], keys_string)
+                        if len(keys) == 0: 
+                            print("MISSING2", pvout["address"], None, None, count, txno, pvout["type"], keys_string)
+                            raise RuntimeError("Missmatch on multisig")
+                        elif len(keys) == 1:
+                            key = keys[0]
+                            key2 = compress_pubkey(key)
+                            addr = key_to_addr(key2)
+                            print("ALIAS", pvout["address"], addr, key2, count, txno, pvout["type"], "special-03")
+                            if key != key2:
+                                print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"], "special-03")
+                        else:
+                            for key in keys:
+                                key2 = compress_pubkey(key)
+                                addr = key_to_addr(key2)
+                                print("MULTI1", pvout["address"], addr, key2, count, txno, pvout["type"])
+                                if key != key2:
+                                    print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"])
+                    elif "scriptSig" in vin and len(vin["scriptSig"]["hex"]) < 66:
+                        print("MISSING3", pvout["address"], None, None, count, txno, pvout["type"], vin)
                     else:
-                        print("MISSING", count, txno, pvout["type"], vin)
+                        print("MISSING", pvout["address"], None, None, count, txno, pvout["type"], vin)
                         raise RuntimeError("Missing pubkey")
                     # Base output
                     print("SPEND", pvout["address"], tim, val, count, txno, pvout["type"])
@@ -175,14 +212,17 @@ while bhash:
             pvin = vout["scriptPubKey"]
             # Really old transactions use the uncompressed pubkey
             if pvin["type"] == "pubkey":
-                # Compress the pubkey
-                pkey = compress_pubkey(pvin["asm"].split(" ")[0])
-                # Determine the '1' type address for this pubkey
-                addr = key_to_addr(pkey)
-                # Log that this pubkey belongs to this adress
-                print("PUBKEY", addr, pkey, count, txno, "pubkey")
-                # Basic output
-                print("RECV", addr, tim, val, count, txno, "pubkey")
+                pubkey = pvin["asm"].split(" ")[0]
+                if pubkey[:2] in ("02", "03", "04"):
+                    pkey = compress_pubkey(pubkey)
+                    # Determine the '1' type address for this pubkey
+                    addr = key_to_addr(pkey)
+                    # Log that this pubkey belongs to this adress
+                    print("PUBKEY", addr, pkey, count, txno, "pubkey")
+                    # Basic output
+                    print("RECV", addr, tim, val, count, txno, "pubkey")
+                else:
+                    print("SKIP", None, tim, val, count, txno, "pubkey")
             elif pvin["type"] in ("pubkeyhash", "witness_v0_keyhash"):
                 print("RECV", pvin["address"], tim, val, count, txno, pvin["type"])
             elif pvin["type"] in ("scripthash", "witness_v0_scripthash", "witness_v1_taproot"):
