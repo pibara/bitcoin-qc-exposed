@@ -22,6 +22,7 @@ def compress_pubkey(pubkey_hex):
         print(len(pubkey), pubkey)
         raise RuntimeError("Pubkey should start with 02/03/04")
     if len(pubkey_hex) != 130:
+        print(len(pubkey_hex), pubkey_hex)
         raise RuntimeError("Unompressed pubkey should be 65 bytes long")
     x = pubkey_hex[2:66]  # x-coordinate in hex
     y = int(pubkey_hex[66:], 16)  # Convert y-coordinate to integer
@@ -138,7 +139,10 @@ while bhash:
                     # Extract the signature depending on adress type
 
                     if pvout["type"] == "witness_v0_keyhash":
-                        pkey = compress_pubkey(vin["prevout"]["txinwitness"][1])
+                        if "txinwitness" in vin["prevout"]:
+                            pkey = compress_pubkey(vin["prevout"]["txinwitness"][1])
+                        else:
+                            pkey = compress_pubkey(vin["txinwitness"][1])
                     else:
                         pkey = compress_pubkey(vin["scriptSig"]["asm"].split(" ")[-1])
                     # Normalize from pubkey to "1" address
@@ -174,16 +178,20 @@ while bhash:
                         keys = []
                         while keys_string[:2] in ("21", "41"):
                             if keys_string[:2] == "21":
-                                keys.append(keys_string[2:68])
+                                new_key = keys_string[2:68]
+                                if len(new_key) == 66 and new_key[:2] in ("02", "03"):
+                                    keys.append(new_key)
                                 keys_string = keys_string[68:]
                             else:
-                                keys.append(keys_string[2:132])
+                                new_key = keys_string[2:132]
+                                if len(new_key) == 130 and new_key[:2] == "04":
+                                    keys.append(new_key)
                                 keys_string = keys_string[132:]
                         if len(keys_string) > 2:
                             print("MISSING3", pvout["address"], None, None, count, txno, pvout["type"], keys_string)
                         if len(keys) == 0: 
-                            print("MISSING2", pvout["address"], None, None, count, txno, pvout["type"], keys_string)
-                            raise RuntimeError("Missmatch on multisig")
+                            print("MISSING2", pvout["address"], None, None, count, txno, pvout["type"], vin)
+                            #raise RuntimeError("Missmatch on multisig")
                         elif len(keys) == 1:
                             key = keys[0]
                             key2 = compress_pubkey(key)
@@ -193,16 +201,17 @@ while bhash:
                                 print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"], "special-03")
                         else:
                             for key in keys:
+                                print(key, keys)
                                 key2 = compress_pubkey(key)
                                 addr = key_to_addr(key2)
                                 print("MULTI1", pvout["address"], addr, key2, count, txno, pvout["type"])
                                 if key != key2:
                                     print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"])
                     elif "scriptSig" in vin and len(vin["scriptSig"]["hex"]) < 66:
-                        print("MISSING3", pvout["address"], None, None, count, txno, pvout["type"], vin)
+                        print("MISSING1", pvout["address"], None, None, count, txno, pvout["type"], vin)
                     else:
-                        print("MISSING", pvout["address"], None, None, count, txno, pvout["type"], vin)
-                        raise RuntimeError("Missing pubkey")
+                        print("MISSING0", pvout["address"], None, None, count, txno, pvout["type"], vin)
+                        #raise RuntimeError("Missing pubkey")
                     # Base output
                     print("SPEND", pvout["address"], tim, val, count, txno, pvout["type"])
         # Itterate all outputs for this transaction
