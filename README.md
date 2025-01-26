@@ -100,6 +100,10 @@ MISSING0 3Db2yLjibuyS9r1JZ4p1mQXr3ZBMA1Zhf6 None None 284029 17 scripthash {'txi
 
 ## event-process.py
 
+```
+event-process.py events.txt | tee exposed.txt
+```
+
 This script, that takes a long time to run, will take the output files from the event-export.py file, and process it to create an output file with lines that look like this:
 
 ```
@@ -115,3 +119,32 @@ After the balance three timestamps are recorded.
 * The time of the last SPEND event for this address.
 
 Please note that the address used here is the **normalized** address. This is mostly relevant for old pubkeys and adresses that were created using uncompressed adresses.
+
+## event-filter.py
+
+```
+./event-filter.py exposed.txt 144 800000
+```
+
+This script combines the output from event-process.py with output from querying bitcoin core for a set number of blocks, for example 144 for a day or 1008 for a week. 
+
+The result might look something like this:
+
+```
+TRIGGER 14jwW8spfTBWLPw6uZMeMZ6Ur69hZgHm9a 2023-07-24T11:19:03 0.011623 800034 246 pubkeyhash 3.8736805800000322 2015-09-29T01:37:38 2017-08-22T05:40:49 2017-08-15T11:22:43
+
+```
+
+This line has fields with the following info:
+
+* Address
+* Time of the new SPEND event
+* Amount of the current SPEND event
+* Block number
+* Transaction within the block
+* Type of the input transaction
+* Last recorded amount on address
+* First use timestamp of the address
+* Last previously known RECV event time
+* Last previouslu known SPEND event time
+
