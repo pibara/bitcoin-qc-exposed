@@ -122,13 +122,16 @@ outfile_block = args.blockfileout
 lookup = {}
 taskblocks = 1000000000
 if args.cmd == "filter":
-    with open(args.exposedfilein) as efile:
-        for line in efile:
-            if "\n" in line:
+    expdir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "881340")
+    for efilepath in [os.path.join(expdir, f) for f in os.listdir(expdir) if os.path.isfile(os.path.join(expdir, f))]:
+        print("Processing", efilepath)
+        with open(efilepath) as efile:
+            for line in efile:
                 line = line[:-1]
                 cmd=line.split(" ")
                 if cmd[0] == "EXPOSED":
                     lookup[cmd[1]] = cmd[2:]
+    print("Imported", len(lookup), "exposed addresses")
     taskblocks = args.taskblocks
     print("Stopping after", taskblocks, "blocks")
 print("Triggers on", len(lookup),"addresses") 
@@ -166,8 +169,16 @@ while bhash and count < maxblock:
                 if pvout["type"] == "pubkey":
                     # Normalize from pubkey to "1" address
                     addr = key_to_addr(pvout["asm"].split(" ")[0], ignore_size=True)
+                    if addr in lookup:
+                        exposed_state = lookup[addr]
+                        print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                     normalized = key_to_addr(compress_pubkey(pvout["asm"].split(" ")[0]))
                     if addr != normalized:
+                        if normalized in lookup:
+                            exposed_state = lookup[normalized]
+                            print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                         print("ALIAS", addr, normalized, compress_pubkey(pvout["asm"].split(" ")[0]), count, txno, "pubkey",
                                 file=out)
                     else:
@@ -178,7 +189,6 @@ while bhash and count < maxblock:
                 # Normal legacy adresses and modern bech32 keyhash adresses
                 elif pvout["type"] in ("pubkeyhash", "witness_v0_keyhash"):
                     # Extract the signature depending on adress type
-
                     if pvout["type"] == "witness_v0_keyhash":
                         if "txinwitness" in vin["prevout"]:
                             pkey = compress_pubkey(vin["prevout"]["txinwitness"][1])
@@ -188,6 +198,10 @@ while bhash and count < maxblock:
                         pkey = compress_pubkey(vin["scriptSig"]["asm"].split(" ")[-1])
                     # Normalize from pubkey to "1" address
                     addr = key_to_addr(pkey)
+                    if addr in lookup:
+                        exposed_state = lookup[addr]
+                        print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                     if addr != pvout["address"]:
                         # Record the signature and '1' type address alias for the adress for if we need it. 
                         print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], file=out)
@@ -202,12 +216,20 @@ while bhash and count < maxblock:
                         pkey = compress_pubkey(vin["prevout"]["txinwitness"][1])
                         # Derive the "1" type adress that this pubkey would have
                         addr = key_to_addr(pkey)
+                        if addr in lookup:
+                            exposed_state = lookup[addr]
+                            print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                         # Record the signature and '1' type address alias for the adress for if we need it.
                         print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], file=out)
                     # Special case, not sure why.
                     elif "scriptSig" in vin and vin["scriptSig"]["asm"].startswith("5121"):
                         pkey = vin["scriptSig"]["asm"][4:70]
                         addr = key_to_addr(pkey)
+                        if addr in lookup:
+                            exposed_state = lookup[addr]
+                            print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                         print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], "special-01", file=out)
                     elif "scriptSig" in vin and len(vin["scriptSig"]["asm"]) < 10:
                         print("SKIP-PUBKEY", pvout["address"], None, None, count, txno, pvout["type"], "special-02", file=out)
@@ -237,15 +259,33 @@ while bhash and count < maxblock:
                             key = keys[0]
                             key2 = compress_pubkey(key)
                             addr = key_to_addr(key2)
+                            if addr in lookup:
+                                exposed_state = lookup[addr]
+                                print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                        exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                             print("ALIAS", pvout["address"], addr, key2, count, txno, pvout["type"], "special-03", file=out)
                             if key != key2:
+                                addr2 = key_to_addr(key, ignore_size=True)
+                                if addr2 in lookup:
+                                    exposed_state = lookup[addr2]
+                                    print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                            exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                                 print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"], "special-03", file=out)
                         else:
                             for key in keys:
                                 key2 = compress_pubkey(key)
                                 addr = key_to_addr(key2)
                                 print("MULTI1", pvout["address"], addr, key2, count, txno, pvout["type"], file=out)
+                                if addr in lookup:
+                                    exposed_state = lookup[addr]
+                                    print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                            exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                                 if key != key2:
+                                    addr2 = key_to_addr(key, ignore_size=True)
+                                    if addr2 in lookup:
+                                        exposed_state = lookup[addr2]
+                                        print("TRIGGER", addr, tim, val, count, txno, "pubkey",
+                                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                                     print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"], file=out)
                     elif "scriptSig" in vin and len(vin["scriptSig"]["hex"]) < 66:
                         print("MISSING1", pvout["address"], None, None, count, txno, pvout["type"], vin, file=out)
@@ -253,6 +293,10 @@ while bhash and count < maxblock:
                         print("MISSING0", pvout["address"], None, None, count, txno, pvout["type"], vin, file=out)
                         #raise RuntimeError("Missing pubkey")
                     # Base output
+                    if pvout["address"] in lookup:
+                        exposed_state = lookup[pvout["address"]]
+                        print("TRIGGER", pvout["address"], tim, val, count, txno, "pubkey",
+                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
                     print("SPEND", pvout["address"], tim, val, count, txno, pvout["type"], file=out)
         # Itterate all outputs for this transaction
         for vout in tx["vout"]:
