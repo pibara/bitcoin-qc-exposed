@@ -172,13 +172,13 @@ while bhash and count < maxblock:
                     if addr in lookup:
                         exposed_state = lookup[addr]
                         print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                     normalized = key_to_addr(compress_pubkey(pvout["asm"].split(" ")[0]))
                     if addr != normalized:
                         if normalized in lookup:
                             exposed_state = lookup[normalized]
                             print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                         print("ALIAS", addr, normalized, compress_pubkey(pvout["asm"].split(" ")[0]), count, txno, "pubkey",
                                 file=out)
                     else:
@@ -201,7 +201,7 @@ while bhash and count < maxblock:
                     if addr in lookup:
                         exposed_state = lookup[addr]
                         print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                     if addr != pvout["address"]:
                         # Record the signature and '1' type address alias for the adress for if we need it. 
                         print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], file=out)
@@ -219,7 +219,7 @@ while bhash and count < maxblock:
                         if addr in lookup:
                             exposed_state = lookup[addr]
                             print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                         # Record the signature and '1' type address alias for the adress for if we need it.
                         print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], file=out)
                     # Special case, not sure why.
@@ -229,7 +229,7 @@ while bhash and count < maxblock:
                         if addr in lookup:
                             exposed_state = lookup[addr]
                             print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                    exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                         print("ALIAS", pvout["address"], addr, pkey, count, txno, pvout["type"], "special-01", file=out)
                     elif "scriptSig" in vin and len(vin["scriptSig"]["asm"]) < 10:
                         print("SKIP-PUBKEY", pvout["address"], None, None, count, txno, pvout["type"], "special-02", file=out)
@@ -262,14 +262,14 @@ while bhash and count < maxblock:
                             if addr in lookup:
                                 exposed_state = lookup[addr]
                                 print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                        exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                        exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                             print("ALIAS", pvout["address"], addr, key2, count, txno, pvout["type"], "special-03", file=out)
                             if key != key2:
                                 addr2 = key_to_addr(key, ignore_size=True)
                                 if addr2 in lookup:
                                     exposed_state = lookup[addr2]
                                     print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                            exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                            exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                                 print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"], "special-03", file=out)
                         else:
                             for key in keys:
@@ -279,13 +279,13 @@ while bhash and count < maxblock:
                                 if addr in lookup:
                                     exposed_state = lookup[addr]
                                     print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                            exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                            exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                                 if key != key2:
                                     addr2 = key_to_addr(key, ignore_size=True)
                                     if addr2 in lookup:
                                         exposed_state = lookup[addr2]
                                         print("TRIGGER", addr, tim, val, count, txno, "pubkey",
-                                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                                     print("ALIAS", addr, key_to_addr(key, ignore_size=True), key2, count, txno, pvout["type"], file=out)
                     elif "scriptSig" in vin and len(vin["scriptSig"]["hex"]) < 66:
                         print("MISSING1", pvout["address"], None, None, count, txno, pvout["type"], vin, file=out)
@@ -296,7 +296,7 @@ while bhash and count < maxblock:
                     if pvout["address"] in lookup:
                         exposed_state = lookup[pvout["address"]]
                         print("TRIGGER", pvout["address"], tim, val, count, txno, "pubkey",
-                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3])
+                                exposed_state[0], exposed_state[1], exposed_state[2], exposed_state[3], file=out)
                     print("SPEND", pvout["address"], tim, val, count, txno, pvout["type"], file=out)
         # Itterate all outputs for this transaction
         for vout in tx["vout"]:
