@@ -1,0 +1,8 @@
+The 881340 directory is missing the file 881340/stripped.log. The file is 134GB in size compressed and almost 500GB uncompressed.
+
+Too big to put under version control in github. Please go to this google docs link and download the file.
+
+https://drive.google.com/uc?id=1zZmoydWvHD8NjA80VIXGZ_glO87Ui76w
+
+
+Then uncompress it to 881340/stripped.log
