@@ -4,147 +4,187 @@ This repo contains a set of simple tools that are meant to look at the idea of a
 
 The idea is that all unspent outputs tied to a public key that is exposed on the blockchain are considered vulnerable to future generations of general purpose quantum computers, and monitoring transactions from these vulnerable public keys, especially long dormant public keys could expose an ongoing attack.
 
-Please note that running the scripts in this repo will take a long time. Hours, usualy. Up to days for some scripts. Syncing your bitcoin core node before you can run the scripts also will take days unless your internet connection is really fast.
+Please note that running the scripts in this repo will take a long time. Hours, usualy. Up to more than a day for the initial run for one of the scripts, possibly longer depending on your system specs. Syncing your bitcoin core node before you can run the scripts also will take days unless your internet connection is really fast.
 
-## Running a bitcoin node
+## Disk storage requirements
 
-The scripts in this repo expect a locally running bitcoin core node. The first and the last script will communicate with the bitcoin core node to extract block data. So if you want. 
+The scripts will work with huge text files containing important logs that span the entire blockchain. If you want to run these scripts and a bitcoin node without gathering any debug info (so you can improve the scripts), make sure you have at least 2TB of free storage. Add an extra TB if you want to either run everything with debug logging on or if you want to run additional related nodes in the future. 
 
-## event-export.py
+# Bitcoin node
 
-This script (currently being tested and patched) communicates with your local bitcoin node and extracts events it deems relevant for the kanarie service. Each event is output on a single line.
+The scripts in this repo expect a locally running bitcoin core node. The first script will communicate with the bitcoin core node to extract block data. So if you want to run these scripts, please first install and sync up your bitcoin core node first.
 
-Currently the following event types are defined:
+## btcqc1.py
+
+This script communicates with your local bitcoin node and extracts events it deems relevant for the kanarie service. Each event is output on a single line to one of multiple output files. The script is normally run in incremental mode, but the first time you run it you should run it in **init** mode.
+
+```
+./btcqc1.py init
+```
+
+This first run is going to take a long time. On my system it takes almost two days to run in init mode. Incremental runs will take significantly shorter.
+
+If you are interested in knowing what events the script is missing out on currently (some transactions can be hard to parse or may need aditional info outside of what the simple logic of this script can provide), you can ask the script to output debug events to a seperate file.
+
+```
+./btcqc1.py init debug
+```
+
+The script will connect to the local bitcoin node and ask for the last block block number. It will use this number to create a snapshot directory with a name that equates the block number. In this directory the script will write a number of files.
+
+### stripped.log
+
+The *stripped.log* output file will contain two types of events:
+
+* RECV
+* SPEND
+
+A RECV event will look something like this:
+
+```
+RECV 1FYPDCP1uVnPgEE3gaDMbAApdv9XYX7Si5 2009-01-03T19:15:05 50.0 0 0 pubkey
+```
+
+A SPEND event will look something like this:
+
+```
+SPEND 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 2009-01-12T04:30:25 50.0 170 1 pubkey
+```
+
+The structure of the event ti simple:
+
+* Event-type 
+* Bitcoin Address
+* Event time
+* Ammount
+* Block number
+* Transaction number within block
+
+
+### pubkey.log
+
+The output file *pubkey.log* currently contains the following event types
 
 * PUBKEY 
 * ALIAS  
 * MULTI1 
-* RECV
-* SPEND
-* MISSINGn / SKIP
 
-You run this script like this:
-
-```
-./event-export.py 0 | tee events.txt
-```
-
-### PUBKEY
+A sample of these event types:
 
 ```
 PUBKEY 1FYPDCP1uVnPgEE3gaDMbAApdv9XYX7Si5 03678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb6 0 0 pubkey
-PUBKEY 1PKW9GWX2P2JhCSR17BXa4B8MJ4ozUjW9Y 0296b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52 1 0 pubkey
-PUBKEY 13JhbjHvD4AwYc6hvXkgjan9WkEcKD4XTB 037211a824f55b505228e4c3d5194c1fcfaa15a456abdf37f9b9d97a4040afc073 2 0 pubkey
-PUBKEY 16sTJe2MXk2corPi5kReMQF9CAhrZMYDtc 0294b9d3e76c5b1629ecf97fff95d7a4bbdac87cc26099ada28066c6ff1eb91912 3 0 pubkey
-```
-
-### ALIAS
-
-```
 ALIAS 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 13KiMqUJ7xD6MhUD2k7mKEoZMHDP9HdWwW 0311db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5c 170 1 pubkey
-ALIAS 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 13KiMqUJ7xD6MhUD2k7mKEoZMHDP9HdWwW 0311db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5c 181 1 pubkey
-ALIAS 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 13KiMqUJ7xD6MhUD2k7mKEoZMHDP9HdWwW 0311db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5c 182 1 pubkey
-ALIAS 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 13KiMqUJ7xD6MhUD2k7mKEoZMHDP9HdWwW 0311db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5c 183 1 pubkey
-```
-
-### MULTI1
-
-```
 MULTI1 3A5XQWZPzG4GrpVeYFaDBZ1s4sXkYB69Wf 1PCURmYByxc5sVZ15m8S7c8F1bXkS9nyS6 0307ac6296168948c3f64ce22f51f6e5424f936c846f1d01223b3d9864f4d95566 177609 24 scripthash
-MULTI1 3A5XQWZPzG4GrpVeYFaDBZ1s4sXkYB69Wf 1HVJDd72T57LX1xq5ggNPHSxRv6iADuURD 03ac6ad514715bec8d5de1873b9bc873bb71773b51338b4d115f9938b6a029b7d1 177609 24 scripthash
-MULTI1 3FArYwLzPwRBbh1yN3Fx6tBZ5rZBPdaMPt 1Jfv1gFEDL1efMka87JYbK7uVXi3shMS4e 032c6aa78662cc43a3bb0f8f850d0c45e18d0a49c61ec69db87e072c88d7a9b6e9 177618 78 scripthash
-MULTI1 3FArYwLzPwRBbh1yN3Fx6tBZ5rZBPdaMPt 1JNoSoaBgDTvpbEWHAqoXkMs1yYBEqAt4V 0353581fd2fc745d17264af8cb8cd507d82c9658962567218965e750590e41c41e 177618 78 scripthash
-MULTI1 3FArYwLzPwRBbh1yN3Fx6tBZ5rZBPdaMPt 13GeragZzUpos6i4Ve81k4DettzTXBwEZc 024fe45dd4749347d281fd5348f56e883ee3a00903af899301ac47ba90f904854f 177618 78 scripthash
-MULTI1 3CK4fEwbMP7heJarmU4eqA3sMbVJyEnU3V 1Bt8XZ3RDUUsRmmqM26uCfNxQF6SEyrjvt 022afc20bf379bc96a2f4e9e63ffceb8652b2b6a097f63fbee6ecec2a49a48010e 177625 51 scripthash
-MULTI1 3CK4fEwbMP7heJarmU4eqA3sMbVJyEnU3V 12ppVrt7pVMQnVpekHmrcEZ5vUnUcFfV6w 03a767c7221e9f15f870f1ad9311f5ab937d79fcaeee15bb2c722bca515581b4c0 177625 51 scripthash
 ```
 
-### RECV
+Note that the structure of a pubkey event is a tiny bit different that of the other two. Also note the lack of timestamps from these events as timestamps would be redundant given that that info is already contained in matching SPEND events.
 
-```
-RECV 1FYPDCP1uVnPgEE3gaDMbAApdv9XYX7Si5 2009-01-03T19:15:05 50.0 0 0 pubkey
-RECV 1PKW9GWX2P2JhCSR17BXa4B8MJ4ozUjW9Y 2009-01-09T03:54:25 50.0 1 0 pubkey
-RECV 13JhbjHvD4AwYc6hvXkgjan9WkEcKD4XTB 2009-01-09T03:55:44 50.0 2 0 pubkey
-RECV 16sTJe2MXk2corPi5kReMQF9CAhrZMYDtc 2009-01-09T04:02:53 50.0 3 0 pubkey
-```
+A PUBKEY event has the following structure:
 
-### SPEND
-
-```
-SPEND 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 2009-01-12T04:30:25 50.0 170 1 pubkey
-SPEND 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 2009-01-12T07:02:13 40.0 181 1 pubkey
-SPEND 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 2009-01-12T07:12:16 30.0 182 1 pubkey
-SPEND 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 2009-01-12T07:34:22 29.0 183 1 pubkey
-SPEND 13HtsYzne8xVPdGDnmJX8gHgBZerAfJGEf 2009-01-12T08:16:40 1.0 187 1 pubkey
-SPEND 1LzBzVqEeuQyjD2mRWHes3dgWrT9titxvq 2009-01-12T15:21:00 1.0 221 1 pubkey
-SPEND 12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S 2009-01-12T21:04:20 28.0 248 1 pubkey
-SPEND 18SH9vwx24L5cTabfkgtGMjF8A56pD9AUJ 2009-01-14T21:40:55 50.0 496 1 pubkey
-SPEND 15NUwyBYrZcnUgTagsm1A7M2yL2GntpuaZ 2009-01-14T21:40:55 1.0 496 1 pubkey
-SPEND 1ByLSV2gLRcuqUmfdYcpPQH8Npm8cccsFg 2009-01-14T21:40:55 10.0 496 1 pubkey
-```
-
-### MISSING1 / MISSING2 / MISSING3 / SKIP
-
-```
-MISSING3 3CK4fEwbMP7heJarmU4eqA3sMbVJyEnU3V None None 203376 50 scripthash 52ae
-MISSING3 3CK4fEwbMP7heJarmU4eqA3sMbVJyEnU3V None None 203376 219 scripthash 52ae
-MISSING3 3DARyyGK1Z1RyYPcPHSkgXhRjqa2fSDycb None None 203912 4 scripthash 52ae
-```
-
-
-### MISSING0
-
-```
-MISSING0 3Db2yLjibuyS9r1JZ4p1mQXr3ZBMA1Zhf6 None None 284029 17 scripthash {'txid': 'ae8196ac3a815ea30f34149c812ea48609819f0fc7a7b6f2799a39e32e78a498', 'vout': 0, 'scriptSig': {'asm': '30450220087ede38729e6d35e4f515505018e659222031273b7366920f393ee3ab17bc1e022100ca43164b757d1a6d1235f13200d4b5f76dd8fda4ec9fc28546b2df5b1211e8df[SINGLE] 0275983913e60093b767e85597ca9397fb2f418e57f998d6afbbc536116085b1cb -4524', 'hex': '4830450220087ede38729e6d35e4f515505018e659222031273b7366920f393ee3ab17bc1e022100ca43164b757d1a6d1235f13200d4b5f76dd8fda4ec9fc28546b2df5b1211e8df03210275983913e60093b767e85597ca9397fb2f418e57f998d6afbbc536116085b1cb02ac91'}, 'prevout': {'generated': False, 'height': 284024, 'value': 0.001, 'scriptPubKey': {'asm': 'OP_HASH160 827fe37ec405346ad4e995323cea83559537b89e OP_EQUAL', 'desc': 'addr(3Db2yLjibuyS9r1JZ4p1mQXr3ZBMA1Zhf6)#8zeh7xyw', 'hex': 'a914827fe37ec405346ad4e995323cea83559537b89e87', 'address': '3Db2yLjibuyS9r1JZ4p1mQXr3ZBMA1Zhf6', 'type': 'scripthash'}}, 'sequence': 4294967295}
-```
-
-## event-process.py
-
-```
-event-process.py events.txt | tee exposed.txt
-```
-
-This script, that takes a long time to run, will take the output files from the event-export.py file, and process it to create an output file with lines that look like this:
-
-```
-EXPOSED 1GSn6DXfX1fUsVk8VcC2RtR1SJYrS4eM9z 0.73249349 2012-04-22T12:05:13 2012-06-04T18:17:17 2012-06-04T18:17:17
-```
-
-The output is limited to adressed with a balances of 0.001 bitcoin or more that have had their public key exposed.
-
-After the balance three timestamps are recorded.
-
-* The time this adress was first seen
-* The time of the last RECV event for this address.
-* The time of the last SPEND event for this address.
-
-Please note that the address used here is the **normalized** address. This is mostly relevant for old pubkeys and adresses that were created using uncompressed adresses.
-
-## event-filter.py
-
-```
-./event-filter.py exposed.txt 144 800000
-```
-
-This script combines the output from event-process.py with output from querying bitcoin core for a set number of blocks, for example 144 for a day or 1008 for a week. 
-
-The result might look something like this:
-
-```
-TRIGGER 14jwW8spfTBWLPw6uZMeMZ6Ur69hZgHm9a 2023-07-24T11:19:03 0.011623 800034 246 pubkeyhash 3.8736805800000322 2015-09-29T01:37:38 2017-08-22T05:40:49 2017-08-15T11:22:43
-
-```
-
-This line has fields with the following info:
-
+* Event-type
 * Address
-* Time of the new SPEND event
-* Amount of the current SPEND event
+* Public key (always the compressed pubkey)
 * Block number
-* Transaction within the block
-* Type of the input transaction
-* Last recorded amount on address
-* First use timestamp of the address
-* Last previously known RECV event time
-* Last previouslu known SPEND event time
+* Transaction number within the block
 
+The ALIAS and MULTI1 events have a close but somewhat different structure with an extra address. ALIAS events are emitted when in early blocks uncompressed addresses were used. We consider these uncompressed addresses aliasses for the addresses that would exist if the public key had been compressed. If the pubkey is exposed it is exposed for both the address used in the SPEND event and for any future USOs using the same signing key but with a compressed pubkey.
+
+* Event-type
+* Address
+* Compressed-pubkey alias for the address
+* Public key (always the compressed pubkey)
+* Block number
+* Transaction number within the block 
+
+There are also similar ALIAS entries involving witness\_v0\_keyhash addresses. Again there an ALIAS event will be emitted on exposure to disclose the fact that both addresses are exposed in the transaction, not just the witness\_v0\_keyhash address.
+
+For MULTI1 the reasoning is similar. If a SPEND is done using multisig, the signatures used that expose the multisig address not only expose the multi sig address, but also any '1' address that directly derives from the signing key used.
+
+### debug.log
+
+If you run the script with *debug* argument, an additional file will get added containing MISSINGn and SKIP events. Discussion of these events falls outside of the scope of this readme.
+
+## Incremental mode
+
+After our seccond script (that we will discuss later) has been run, we will run btcqc1.py only in incremental mode.
+
+```
+./btcqc1.py
+```
+
+Doing this will do two things. It will run the same logic as initial mode, but only for the new blocks, creating a new snapshot dir in the process, and it will look for use in SPEND events of addresses that were set on the watch-list by the previous run of our second script.
+
+If such an event occurs, it is written to an additional file:
+
+### trigger.log
+
+The *trigger.log* file of incremental runs will contain TRIGGER events. There are emitted when new SPEND transactions on watch-list addresses are detected.
+Here is an example.
+
+```
+TRIGGER 1KWhgos1nynvVQ9g88VUYAtiyWtgNkiD6z 2025-02-01T03:53:47 5.0 881710 187 pubkey 20.602152290000003 2010-07-23T23:47:34 2021-02-15T20:34:59 2018-01-30T01:19:33
+```
+
+The structure of this event is as follows:
+
+* Event-type
+* Address
+* Time of trigger event
+* Amount
+* Block number
+* Transaction number within the block
+* -
+* Total amount at address before the SPEND
+* Time this address was first seen on the chain 
+* Last moment this address received funds
+* Last time this address spent funds 
+
+
+So for the example event, the key with addess 1KWhgos1nynvVQ9g88VUYAtiyWtgNkiD6z was used to spent 5.0 bitcoin out of the about 20.6 bitcoin the address held on the previous snapshot. This address (or its uncompressed equivalent) was seen first on the blockchain on june 23 2010,  the last time it was passive (RECV) part of a transaction was on february 15 2021, and the last time the address was actively part of a transaction (SPEND) was january 30 2018.
+
+If we were 10 years into the future, this TRIGGER event might be part of a quantum blockchain heist, right now QC hasn't by far come to the level where transactions like this would be suspect, and the amount and size of TRIGGER events now in 2025 is a clear sign that we have a long way to go in terms of awareness. But we hope these scripts could help a bit with the awareness part.  
+
+# btcqc2.py
+
+The second script in this script collection is *btcqc2.py*. Like *btcqc1.py* this script has a **init** option that should be used on the first run. Without that option the script runs in incremental mode.
+
+```
+./btcqc2.py init
+```
+
+The first run for this script, assuming modern SSDs and a decent CPU, should take a few hours on the first run. What the script primaraly does in **init** mode is go through the event files generated by btcqc1.py, and find all addresses that both have their public key exposed on the blockchain AND still have unspent putputs of at least 0.01 BTC. The idea is that when QC becomes advanced enough to slice through a ECDSA public keys in hours up to weeks, smaller funds keys won't likely become a target of such attacks.
+
+Because on the initial run the amount of public keys to keep track off will be huge, too huge probably to keep in memory, the initial run will in fact be 16 distinct runs where the public key address space is divided between runs using the first three characters of the compressed pubkey.
+
+The script in **init** mode will generate 16 output files named **exposed020-021.log** up to **exposed03e-03f.log**, representing the part of the pubkey address space covered by the file.
+
+Each of the files will contain lines like this:
+
+```
+EXPOSED 13yNg5QcCSXZTCVY5VucfqNqm6nQQETXfo 2500.0 2016-07-25T04:08:19 2016-08-08T23:26:35 2016-09-01T03:37:17
+```
+
+This line is buils up as follows:
+
+* Eventy-type
+* Address
+* Amount of USO still bound to the address
+* Moment this key (or its uncompressed alias) was first used
+* Last moment this address received funds
+* Last moment this address spent funds.
+
+The TRIGGER events discussed with the btcqc1.py are derived from the EXPOSED events.
+After (and only after) btcqc2.py has been run in init mode once, will btcqc1.py be able to run in incremental mode. In fact, btcqc2.py should be run after every run of btcqc1.py to ensure the next incremental run of btcqc1.py will run correctly.
+
+
+Just like btcqc1.py, btcqc2.py can be run in incremental mode. Doing so will create update expose.log files based on only those pubkeys exposed in the increment.
+
+```
+./btcqc2.py
+``` 
+
+The btcqc2.py will maintain the *runs.var* file to keep track of snapshot dirs with completed btcqc2.py runs.
+
+# Comming up
+
+From this we want to create a 3th script for generating increment kanarie reports.
