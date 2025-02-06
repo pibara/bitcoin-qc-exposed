@@ -1,0 +1,6 @@
+runs.var
+**/stripped.log
+**/pubkey.log
+**/trigger.log
+**/debug.log
+**/exposed*
