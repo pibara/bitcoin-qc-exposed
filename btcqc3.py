@@ -2,6 +2,7 @@
 import os
 import json
 import math
+import dateutil.parser as parser
 
 def meta_from_stripped(rdir):
     spath = os.path.join(rdir,"stripped.log")
@@ -21,7 +22,10 @@ def meta_from_stripped(rdir):
                 rval["volume"] += float(parts[3])
     return rval
 
-def meta_from_trigger(rdir):
+def meta_from_trigger(rdir, startiso):
+
+
+    start = int((parser.parse(startiso.split("T")[0] + "T00:00:00").timestamp()/86400) + 0.01)
     bykey = {}
     tpath = os.path.join(rdir, "trigger.log")
     with open(tpath) as tfil:
@@ -31,8 +35,13 @@ def meta_from_trigger(rdir):
                     line = line[:-1]
                 cmd,key,ttim,amount,block, tx, src, balance, extime, rtim, stim = line.split(" ")
                 if key not in bykey:
-                    bykey[key] = [0.0, extime.split("-")[0]]
+                    psiso = stim
+                    if stim == "None":
+                        psiso = extime
+                    age = start - int((parser.parse(psiso.split("T")[0] + "T00:00:00").timestamp()/86400) + 0.01)
+                    bykey[key] = [0.0, extime.split("-")[0], 0, age]
                 bykey[key][0] += float(amount)
+                bykey[key][2] += 1
     rval = {}
     rval["volume"] = 0.0
     rval["years"] = {}
@@ -43,10 +52,12 @@ def meta_from_trigger(rdir):
     rval["years"]["TOTAL"] = {}
     rval["years"]["TOTAL"]["TOTAL"] = 0.0
     for key,val in bykey.items():
-        if val[0] >= 100:
+        if val[0] >= 0.001:
             rval["top"][key] = {}
             rval["top"][key]["volume"] = val[0]
             rval["top"][key]["exposed"] = val[1]
+            rval["top"][key]["count"] = val[2]
+            rval["top"][key]["dormant"] = val[3]
         amm = str(math.pow(10,math.floor(math.log10(val[0]))))
         if amm not in rval["years"][val[1]]:
             rval["years"][val[1]][amm] = 0.0
@@ -64,7 +75,7 @@ def meta_to_md(rdir, meta):
     with open(reportpath, "w") as report:
         percentage = str(int(1000*meta["triggers"]["volume"]/meta["volume"])/10)+"%"
         texp = meta["triggers"]["volume"]
-        print("#Bitcoin QC Kanarie run from", meta["start"], "till", meta["end"], file=report)
+        print("# Bitcoin QC Kanarie run from", meta["start"], "till", meta["end"], file=report)
         print(file=report)
         print("This is a report of recent transactions comming from reused addresses.", file=report)
         print("The goal of this report is to act as a kanarie service for future quantum computing heists.", file=report)
@@ -97,22 +108,37 @@ def meta_to_md(rdir, meta):
         print(file=report)
         print("## Top addresses", file=report)
         tvol = 0.0
-        print("| volume part | exposure year | address |", file=report)
-        print("| --- | --- | --- |", file=report)
+        print("| volume part | exposure year | count | dormant for |  address |", file=report)
+        print("| --- | --- | --- | --- | --- |", file=report)
         for key, val in meta["triggers"]["top"].items():
             volume = int(val["volume"]*10000/texp)/100
             tvol += volume
             exposed = val["exposed"]
-            if volume >= 1.0:
-                print("|", str(volume) +"% |", exposed, "| [" + key + "](https://www.blockchain.com/explorer/addresses/btc/" + key + ") |", file=report)
+            cnt = val["count"] 
+            dormant = val["dormant"]
+            if volume >= 1:
+                print("|", str(volume) +"% |", exposed, "|", cnt, "|", dormant, "days | [" + key + "](https://www.blockchain.com/explorer/addresses/btc/" + key + ") |", file=report)
 
         print(file=report)
         print("Total:", int(tvol*100)/100, "% of exposed address volume.", file=report)
+        print("## Long dormant addresses", file=report)
+        print("The below is a sample of relatively high volume exposed adresses that were dormant for mor than a whole year.", file=report) 
+        print("| volume part | exposure year | count | dormant for |  address |", file=report)
+        print("| --- | --- | --- | --- | --- |", file=report)
+        for key, val in meta["triggers"]["top"].items():
+            volume = int(val["volume"]*10000/texp)/100
+            exposed = val["exposed"]
+            cnt = val["count"]
+            dormant = val["dormant"]
+            if dormant > 365 and volume >= 0.01:
+                print("|", str(volume) +"% |", exposed, "|", cnt, "|", dormant, "days | [" + key + "](https://www.blockchain.com/explorer/addresses/btc/" + key + ") |", file=report)
+        print("# Code", file=report)
+        print("This post was generated with [these scripts](https://github.com/pibara/bitcoin-qc-exposed). Merge requests are highly welcomed.", file=report)
 
 def make_report(rdir, rfilpath):
     print("Making report for", rdir)
     meta1 = meta_from_stripped(rdir)
-    meta1["triggers"] = meta_from_trigger(rdir)
+    meta1["triggers"] = meta_from_trigger(rdir, meta1["start"])
     meta_to_md(rdir, meta1)
 
 with open("runs.var") as runs:
